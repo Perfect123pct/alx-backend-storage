@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Cache module for reading from Redis and recovering original type
+Module for retrieving lists
 """
 
 import redis
-from typing import Callable, Optional, Union
+from typing import Callable, List, Union
 
 class Cache:
     """
-    Cache class for reading from Redis and recovering original type
+    Cache class for storing and retrieving data
     """
-
     def __init__(self) -> None:
         """
         Initialize the Cache object with a Redis client instance
@@ -30,55 +29,29 @@ class Cache:
         self._redis.set(key, data)
         return key
 
-    def get(self, key: str, fn: Optional[Callable] = None) -> Union[str, bytes, int, float, None]:
+    def replay(self, func: Callable) -> None:
         """
-        Retrieve data from Redis using the given key and optionally apply a conversion function
+        Display the history of calls of a particular function
         Args:
-            key (str): The key to retrieve data from Redis
-            fn (Optional[Callable]): A conversion function to apply to the retrieved data (default: None)
-
-        Returns:
-            Union[str, bytes, int, float, None]: The retrieved data from Redis, optionally converted
+            func (Callable): The function whose history of calls to be displayed
         """
-        data = self._redis.get(key)
-        if data is None:
-            return None
-        if fn:
-            return fn(data)
-        return data
+        keys = self._redis.keys()
+        calls: List[str] = []
 
-    def get_str(self, key: str) -> Optional[str]:
-        """
-        Retrieve string data from Redis using the given key
-        Args:
-            key (str): The key to retrieve string data from Redis
+        for key in keys:
+            call_args = self._redis.lrange(key, 0, -1)
+            if call_args:
+                calls.append(f"{func.__name__}(*{call_args}) -> {key}")
 
-        Returns:
-            Optional[str]: The retrieved string data from Redis
-        """
-        return self.get(key, fn=lambda d: d.decode("utf-8"))
-
-    def get_int(self, key: str) -> Optional[int]:
-        """
-        Retrieve integer data from Redis using the given key
-        Args:
-            key (str): The key to retrieve integer data from Redis
-
-        Returns:
-            Optional[int]: The retrieved integer data from Redis
-        """
-        return self.get(key, fn=int)
+        print(f"{func.__name__} was called {len(calls)} times:")
+        for call in calls:
+            print(call)
 
 if __name__ == "__main__":
+    # Example usage
     cache = Cache()
-
-    TEST_CASES = {
-        b"foo": None,
-        123: int,
-        "bar": lambda d: d.decode("utf-8")
-    }
-
-    for value, fn in TEST_CASES.items():
-        key = cache.store(value)
-        assert cache.get(key, fn=fn) == value
+    cache.store("foo")
+    cache.store("bar")
+    cache.store(42)
+    cache.replay(cache.store)
 
